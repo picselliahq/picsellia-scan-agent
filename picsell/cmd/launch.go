@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/enescakir/emoji"
 	"github.com/fatih/color"
@@ -102,7 +104,13 @@ to quickly create a Cobra application.`,
 			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Name, emoji.Avocado, emoji.Avocado)
 			color.Green("%v  Do not kill this terminal, you won't be able to perform automatical job call  %v\n", emoji.Warning, emoji.Warning)
 			r := gin.Default()
-			r.POST("/", func(c *gin.Context) {
+
+			srv := &http.Server{
+				Addr:    ":8080",
+				Handler: r,
+			}
+
+			r.POST("/next_run", func(c *gin.Context) {
 				var run Run
 				if err := c.BindJSON(&run); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{
@@ -141,7 +149,20 @@ to quickly create a Cobra application.`,
 					"message": "container stop",
 				})
 			})
-			r.Run()
+
+			r.POST("/terminate", func(c *gin.Context) {
+
+				fmt.Printf("No more run to go bye bye \n")
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := srv.Shutdown(ctx); err != nil {
+					log.Fatal("Server forced to shutdown:", err)
+				}
+			})
+
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("listen: %s\n", err)
+			}
 		}
 	},
 }
