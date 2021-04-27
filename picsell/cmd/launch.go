@@ -25,6 +25,9 @@ import (
 	"github.com/spf13/cobra"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 // launchCmd represents the launch command
@@ -38,6 +41,13 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		c := make(chan os.Signal)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			cleanup()
+			os.Exit(1)
+		}()
 		if len(args) < 1 {
 			color.Red("Please specify the action to init ( picsell launch sweep ) \n")
 			return
@@ -47,7 +57,9 @@ to quickly create a Cobra application.`,
 				color.Red("Please provide the sweep ID ( picsell launch sweep SWEEP_ID ) \n")
 				return
 			}
-			url := URL + "run/cli/" + args[1] + "/next_run"
+
+			host_id := getConfigHost()
+			url := URL + "run/cli/" + args[1] + "/next_run/" + host_id
 			token := getAPIToken()
 			var bearer = "Token " + token
 
@@ -97,6 +109,10 @@ to quickly create a Cobra application.`,
 	},
 }
 
+func cleanup() {
+
+	fmt.Println("Cleanup")
+}
 func init() {
 	rootCmd.AddCommand(launchCmd)
 

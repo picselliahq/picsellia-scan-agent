@@ -28,7 +28,7 @@ import (
 	"os/user"
 )
 
-var URL = "http://localhost:8000/sdk/v2/"
+var URL = "https://beta.picsellia.com/sdk/v2/"
 
 type Configuration struct {
 	TunnelUrlID string
@@ -59,7 +59,7 @@ to quickly create a Cobra application.`,
 			subdomain := getConfigHost()
 			var tunnelUrl = "https://" + subdomain + ".loca.lt"
 
-			values := map[string]string{"tunnelUrl": tunnelUrl, "username": user.Username}
+			values := map[string]string{"tunnelUrl": tunnelUrl, "username": user.Username, "id": subdomain}
 			json_data, err := json.Marshal(values)
 			if err != nil {
 				log.Fatal(err)
