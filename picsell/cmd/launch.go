@@ -18,16 +18,17 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/enescakir/emoji"
-	"github.com/fatih/color"
-	"github.com/gin-gonic/gin"
-	"github.com/jweslley/localtunnel"
-	"github.com/spf13/cobra"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/enescakir/emoji"
+	"github.com/fatih/color"
+	"github.com/gin-gonic/gin"
+	"github.com/jweslley/localtunnel"
+	"github.com/spf13/cobra"
 )
 
 // launchCmd represents the launch command
@@ -45,7 +46,8 @@ to quickly create a Cobra application.`,
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-c
-			cleanup()
+			fmt.Printf("%v Exiting run, the machine will be removed from available host for your sweep %v \n", emoji.Avocado, emoji.Avocado)
+			unregisterHost(args[1])
 			os.Exit(1)
 		}()
 		if len(args) < 1 {
@@ -77,12 +79,13 @@ to quickly create a Cobra application.`,
 
 			var res Run
 			json.NewDecoder(resp.Body).Decode(&res)
+
 			var envs []string
 			for i := range res.Env {
 				envs = append(envs, res.Env[i].Name+"="+res.Env[i].Value)
 			}
 
-			fmt.Printf("Starting container %v to launch run %v %v \n", res.DockerImage, res.Experiment.Name, emoji.ManTechnologist)
+			fmt.Printf("Starting container %v to launch run %v %v \n", res.DockerImage, res.Name, emoji.ManTechnologist)
 			container_id := RunContainer(res.DockerImage, envs)
 
 			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", res.DockerImage, container_id, emoji.Laptop)
@@ -96,12 +99,46 @@ to quickly create a Cobra application.`,
 				return
 			}
 
-			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Experiment.Name, emoji.Avocado, emoji.Avocado)
+			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Name, emoji.Avocado, emoji.Avocado)
 			color.Green("%v Do not kill this terminal, you won't be able to perform automatical job call %v", emoji.Warning, emoji.Warning)
 			r := gin.Default()
-			r.GET("/next_run", func(c *gin.Context) {
+			r.POST("/next_run", func(c *gin.Context) {
+				var run Run
+				if err := c.BindJSON(&run); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{
+						"message": "bad request format",
+					})
+					return
+				}
+				var envs []string
+				for i := range res.Env {
+					envs = append(envs, res.Env[i].Name+"="+res.Env[i].Value)
+				}
+
+				fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)
+				container_id := RunContainer(run.DockerImage, envs)
+
+				fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", run.DockerImage, container_id, emoji.Laptop)
 				c.JSON(200, gin.H{
 					"message": "ip",
+				})
+			})
+
+			r.POST("/kill", func(c *gin.Context) {
+				var killInstruction Kill
+				if err := c.BindJSON(&killInstruction); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{
+						"message": "bad request format",
+					})
+					return
+				}
+				fmt.Printf("Instruction to kill %v received %v \n", killInstruction.Name, emoji.ManTechnologist)
+				killed := stopRunningContainer(killInstruction.Name)
+				if killed {
+					go getNextRun(args[1])
+				}
+				c.JSON(200, gin.H{
+					"message": "container stop",
 				})
 			})
 			r.Run()

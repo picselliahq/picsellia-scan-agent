@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/enescakir/emoji"
-	//"github.com/jweslley/localtunnel"
 	"github.com/spf13/cobra"
 	"log"
 	"net/http"

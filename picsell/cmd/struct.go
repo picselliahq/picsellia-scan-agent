@@ -1,6 +1,6 @@
 package cmd
 
-type Run struct {
+type EntireRun struct {
 	CreationDate string                 `json:"date_created"`
 	ID           string                 `json:"id"`
 	Parameters   map[string]interface{} `json:"parameters"`
@@ -15,6 +15,17 @@ type Run struct {
 	Info         map[string]interface{} `json:"info"`
 	DockerImage  string                 `json:"docker_image"`
 	Env          []EnvStruc             `json:"env"`
+}
+
+type Run struct {
+	Name        string     `json:"name"`
+	DockerImage string     `json:"docker_image"`
+	Env         []EnvStruc `json:"env"`
+}
+
+type Kill struct {
+	Name        string `json:"name"`
+	DockerImage string `json:"docker_image"`
 }
 
 type ExperimentStruct struct {

@@ -4,7 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/satori/go.uuid"
+	"log"
+	"net/http"
+
+	"github.com/enescakir/emoji"
+	uuid "github.com/satori/go.uuid"
+
 	//"io"
 	"io/ioutil"
 	"os"
@@ -78,4 +83,84 @@ func getAPIToken() string {
 	}
 
 	return api_token
+}
+
+func unregisterHost(sweepId string) {
+
+	host_id := getConfigHost()
+
+	token := getAPIToken()
+	var bearer = "Token " + token
+
+	req, err := http.NewRequest("POST", URL+"sweep/"+sweepId+"/"+host_id+"/unregister", nil)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Add("Authorization", bearer)
+
+	client := &http.Client{}
+	_, err = client.Do(req)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func stopRunningContainer(imageName string) bool {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
+
+	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	for _, container := range containers {
+
+		if container.Image == imageName {
+			fmt.Print("Stopping container ", container.ID[:10], "...")
+			if err := cli.ContainerStop(ctx, container.ID, nil); err != nil {
+				panic(err)
+			}
+			fmt.Printf("%v Stopped", imageName)
+			return true
+		}
+
+	}
+	return false
+}
+
+func getNextRun(sweepID string) {
+
+	host_id := getConfigHost()
+	url := URL + "run/cli/" + sweepID + "/next_run/" + host_id
+	token := getAPIToken()
+	var bearer = "Token " + token
+
+	req, err := http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", bearer)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer resp.Body.Close()
+
+	var res Run
+	json.NewDecoder(resp.Body).Decode(&res)
+
+	var envs []string
+	for i := range res.Env {
+		envs = append(envs, res.Env[i].Name+"="+res.Env[i].Value)
+	}
+
+	fmt.Printf("Starting container %v to launch run %v %v \n", res.DockerImage, res.Name, emoji.ManTechnologist)
+	container_id := RunContainer(res.DockerImage, envs)
+
+	fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", res.DockerImage, container_id, emoji.Laptop)
+
 }
