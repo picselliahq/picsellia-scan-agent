@@ -100,9 +100,9 @@ to quickly create a Cobra application.`,
 			}
 
 			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Name, emoji.Avocado, emoji.Avocado)
-			color.Green("%v Do not kill this terminal, you won't be able to perform automatical job call %v", emoji.Warning, emoji.Warning)
+			color.Green("%v  Do not kill this terminal, you won't be able to perform automatical job call  %v\n", emoji.Warning, emoji.Warning)
 			r := gin.Default()
-			r.POST("/next_run", func(c *gin.Context) {
+			r.POST("/", func(c *gin.Context) {
 				var run Run
 				if err := c.BindJSON(&run); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{
@@ -111,8 +111,8 @@ to quickly create a Cobra application.`,
 					return
 				}
 				var envs []string
-				for i := range res.Env {
-					envs = append(envs, res.Env[i].Name+"="+res.Env[i].Value)
+				for i := range run.Env {
+					envs = append(envs, run.Env[i].Name+"="+run.Env[i].Value)
 				}
 
 				fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)

@@ -17,10 +17,13 @@ package cmd
 
 import (
 	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/enescakir/emoji"
 	"github.com/gin-gonic/gin"
 	"github.com/jweslley/localtunnel"
 	"github.com/spf13/cobra"
-	"log"
 )
 
 // listenCmd represents the listen command
@@ -44,9 +47,43 @@ to quickly create a Cobra application.`,
 		}
 		fmt.Printf(tunnel.URL())
 		r := gin.Default()
-		r.GET("/ping", func(c *gin.Context) {
+		r.POST("/next_run", func(c *gin.Context) {
+			var run Run
+			if err := c.BindJSON(&run); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"message": "bad request format",
+				})
+				return
+			}
+			var envs []string
+			for i := range run.Env {
+				envs = append(envs, run.Env[i].Name+"="+run.Env[i].Value)
+			}
+
+			fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)
+			container_id := RunContainer(run.DockerImage, envs)
+
+			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", run.DockerImage, container_id, emoji.Laptop)
 			c.JSON(200, gin.H{
 				"message": "ip",
+			})
+		})
+
+		r.POST("/kill", func(c *gin.Context) {
+			var killInstruction Kill
+			if err := c.BindJSON(&killInstruction); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"message": "bad request format",
+				})
+				return
+			}
+			fmt.Printf("Instruction to kill %v received %v \n", killInstruction.Name, emoji.ManTechnologist)
+			killed := stopRunningContainer(killInstruction.Name)
+			if killed {
+				go getNextRun(args[1])
+			}
+			c.JSON(200, gin.H{
+				"message": "container stop",
 			})
 		})
 		r.Run()
