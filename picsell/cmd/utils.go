@@ -53,19 +53,11 @@ func getConfigHost() string {
 func RunContainer(imageName string, envs []string) string {
 
 	ctx := context.Background()
-	// cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	// if err != nil {
-	// 	panic(err)
-	// }
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		panic(err)
+	}
 
-	// // fmt.Println(envs)
-	// _, err = cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// fmt.Println(reader)
-	// io.Copy(os.Stdout, reader)
 	resp, err := cli.ContainerCreate(ctx, &container.Config{Image: imageName, Env: envs}, nil, nil, nil, "")
 	if err != nil {
 		panic(err)

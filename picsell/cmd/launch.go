@@ -70,9 +70,10 @@ to quickly create a Cobra application.`,
 				envs = append(envs, res.Env[i].Name+"="+res.Env[i].Value)
 			}
 
-			fmt.Printf("Pulling %v to launch run %v %v \n", res.DockerImage, res.Experiment.Name, emoji.ManTechnologist)
+			fmt.Printf("Starting container %v to launch run %v %v \n", res.DockerImage, res.Experiment.Name, emoji.ManTechnologist)
 			container_id := RunContainer(res.DockerImage, envs)
 
+			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", res.DockerImage, container_id, emoji.Laptop)
 			var port = 8080
 			subdomain := getConfigHost()
 
@@ -83,8 +84,8 @@ to quickly create a Cobra application.`,
 				return
 			}
 
-			fmt.Printf("Training launched, you can visualize your logs on  %v https://beta.picsellia.com %v  \n", emoji.Avocado, emoji.Avocado)
-			color.Green("Do not kill this terminal, you won't be able to perform automatical job call")
+			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Experiment.Name, emoji.Avocado, emoji.Avocado)
+			color.Green("%v Do not kill this terminal, you won't be able to perform automatical job call %v", emoji.Warning, emoji.Warning)
 			r := gin.Default()
 			r.GET("/next_run", func(c *gin.Context) {
 				c.JSON(200, gin.H{
