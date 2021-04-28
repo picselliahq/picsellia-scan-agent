@@ -19,12 +19,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/enescakir/emoji"
-	"github.com/spf13/cobra"
 	"log"
 	"net/http"
 	"os/exec"
 	"os/user"
+
+	"github.com/enescakir/emoji"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
 var URL = "https://beta.picsellia.com/sdk/v2/"
@@ -35,24 +37,19 @@ type Configuration struct {
 
 // initCmd represents the init command
 var initCmd = &cobra.Command{
-	Use:   "init",
+	Use:   "init sweep YOUR_SWEEP_ID",
 	Short: "Initialize connection to Picsellia server",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Long:  `Use the init command to register this machine to Picsellia platform, This way Picsellia Oracle will be able to send jobs to it.`,
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		if len(args) < 1 {
-			fmt.Printf("Please specify the action to init ( picsell init sweep ) \n")
+			color.Red("Please specify the action to init ( picsell init sweep ID ) \n")
 			return
 		}
 		user, _ := user.Current()
 		if args[0] == "sweep" {
 			if len(args) < 2 {
-				fmt.Printf("Please provide the sweep ID ( picsell init sweep SWEEP_ID ) \n")
+				color.Red("Please provide the sweep ID ( picsell init sweep SWEEP_ID ) \n")
 				return
 			}
 			subdomain := getConfigHost()
@@ -75,7 +72,12 @@ to quickly create a Cobra application.`,
 			resp, err := client.Do(req)
 
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+				return
+			}
+			if resp.StatusCode != http.StatusCreated {
+				log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+				return
 			}
 
 			defer resp.Body.Close()
@@ -97,9 +99,11 @@ to quickly create a Cobra application.`,
 				fmt.Println(err.Error())
 				return
 			}
-			// Print the output
+
 			fmt.Println(string(stdout))
 			fmt.Printf("Docker image %v pulled %v \n You can run (picsell launch sweep %v ) \n", res.DockerImage, emoji.ThumbsUp, args[1])
+		} else {
+			log.Fatalf("Please run init sweep ID")
 		}
 
 	},
@@ -107,14 +111,4 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// initCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// initCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

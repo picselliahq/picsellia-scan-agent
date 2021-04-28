@@ -31,6 +31,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jweslley/localtunnel"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // launchCmd represents the launch command
@@ -44,13 +45,77 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		gpus := viper.GetBool("gpu")
+		r := gin.Default()
+		srv := &http.Server{
+			Addr:    ":8080",
+			Handler: r,
+		}
+		r.POST("/next_run", func(c *gin.Context) {
+			var run Run
+			if err := c.BindJSON(&run); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"message": "bad request format",
+				})
+				return
+			}
+			var envs []string
+			for i := range run.Env {
+				envs = append(envs, run.Env[i].Name+"="+run.Env[i].Value)
+			}
+			fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)
+			container_id := RunContainerCmd(run.DockerImage, envs, gpus)
+			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", run.DockerImage, container_id, emoji.Laptop)
+			c.JSON(200, gin.H{
+				"sucess": "Next run launched",
+			})
+		})
+
+		r.POST("/kill", func(c *gin.Context) {
+			var killInstruction Kill
+			if err := c.BindJSON(&killInstruction); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"message": "bad request format",
+				})
+				return
+			}
+			fmt.Printf("Instruction to kill %v received %v \n", killInstruction.Name, emoji.ManTechnologist)
+			killed := stopRunningContainer(killInstruction.Name)
+			if !killed {
+				fmt.Printf("Can't kill container")
+			}
+			c.JSON(200, gin.H{
+				"message": "container stop",
+			})
+		})
+
+		r.POST("/terminate", func(c *gin.Context) {
+
+			fmt.Printf("No more run to go bye bye \n")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Fatal("Server forced to shutdown:", err)
+			}
+		})
+
 		c := make(chan os.Signal)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-c
 			fmt.Printf("%v Exiting run, the machine will be removed from available host for your sweep %v \n", emoji.Avocado, emoji.Avocado)
-			unregisterHost(args[1])
-			os.Exit(1)
+			killed := unregisterHost(args[1])
+
+			time.Sleep(100)
+			if killed {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := srv.Shutdown(ctx); err != nil {
+					log.Fatal("Server forced to shutdown:", err)
+				}
+				os.Exit(1)
+			}
+
 		}()
 		if len(args) < 1 {
 			color.Red("Please specify the action to init ( picsell launch sweep ) \n")
@@ -77,6 +142,12 @@ to quickly create a Cobra application.`,
 				log.Fatal(err)
 			}
 
+			if resp.StatusCode != http.StatusOK {
+				fmt.Println(resp.StatusCode)
+				fmt.Printf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+				return
+			}
+
 			defer resp.Body.Close()
 
 			var res Run
@@ -88,8 +159,11 @@ to quickly create a Cobra application.`,
 			}
 
 			fmt.Printf("Starting container %v to launch run %v %v \n", res.DockerImage, res.Name, emoji.ManTechnologist)
-			container_id := RunContainer(res.DockerImage, envs)
+			container_id := RunContainerCmd(res.DockerImage, envs, gpus)
 
+			if container_id == "failed" {
+				log.Fatal("Container did not start")
+			}
 			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", res.DockerImage, container_id, emoji.Laptop)
 			var port = 8080
 			subdomain := getConfigHost()
@@ -103,62 +177,6 @@ to quickly create a Cobra application.`,
 
 			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Name, emoji.Avocado, emoji.Avocado)
 			color.Green("%v  Do not kill this terminal, you won't be able to perform automatical job call  %v\n", emoji.Warning, emoji.Warning)
-			r := gin.Default()
-
-			srv := &http.Server{
-				Addr:    ":8080",
-				Handler: r,
-			}
-
-			r.POST("/next_run", func(c *gin.Context) {
-				var run Run
-				if err := c.BindJSON(&run); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{
-						"message": "bad request format",
-					})
-					return
-				}
-				var envs []string
-				for i := range run.Env {
-					envs = append(envs, run.Env[i].Name+"="+run.Env[i].Value)
-				}
-
-				fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)
-				container_id := RunContainer(run.DockerImage, envs)
-
-				fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", run.DockerImage, container_id, emoji.Laptop)
-				c.JSON(200, gin.H{
-					"message": "ip",
-				})
-			})
-
-			r.POST("/kill", func(c *gin.Context) {
-				var killInstruction Kill
-				if err := c.BindJSON(&killInstruction); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{
-						"message": "bad request format",
-					})
-					return
-				}
-				fmt.Printf("Instruction to kill %v received %v \n", killInstruction.Name, emoji.ManTechnologist)
-				killed := stopRunningContainer(killInstruction.Name)
-				if killed {
-					go getNextRun(args[1])
-				}
-				c.JSON(200, gin.H{
-					"message": "container stop",
-				})
-			})
-
-			r.POST("/terminate", func(c *gin.Context) {
-
-				fmt.Printf("No more run to go bye bye \n")
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := srv.Shutdown(ctx); err != nil {
-					log.Fatal("Server forced to shutdown:", err)
-				}
-			})
 
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Fatalf("listen: %s\n", err)
@@ -182,5 +200,5 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// launchCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	launchCmd.Flags().BoolP("gpu", "g", true, "Set to false if you don't have any gpu driver on your machine")
 }
