@@ -46,77 +46,7 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		gpus := viper.GetBool("gpu")
-		r := gin.Default()
-		srv := &http.Server{
-			Addr:    ":8080",
-			Handler: r,
-		}
-		r.POST("/next_run", func(c *gin.Context) {
-			var run Run
-			if err := c.BindJSON(&run); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "bad request format",
-				})
-				return
-			}
-			var envs []string
-			for i := range run.Env {
-				envs = append(envs, run.Env[i].Name+"="+run.Env[i].Value)
-			}
-			fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)
-			container_id := RunContainerCmd(run.DockerImage, envs, gpus)
-			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", run.DockerImage, container_id, emoji.Laptop)
-			c.JSON(200, gin.H{
-				"sucess": "Next run launched",
-			})
-		})
 
-		r.POST("/kill", func(c *gin.Context) {
-			var killInstruction Kill
-			if err := c.BindJSON(&killInstruction); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"message": "bad request format",
-				})
-				return
-			}
-			fmt.Printf("Instruction to kill %v received %v \n", killInstruction.Name, emoji.ManTechnologist)
-			killed := stopRunningContainer(killInstruction.Name)
-			if !killed {
-				fmt.Printf("Can't kill container")
-			}
-			c.JSON(200, gin.H{
-				"message": "container stop",
-			})
-		})
-
-		r.POST("/terminate", func(c *gin.Context) {
-
-			fmt.Printf("No more run to go bye bye \n")
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := srv.Shutdown(ctx); err != nil {
-				log.Fatal("Server forced to shutdown:", err)
-			}
-		})
-
-		c := make(chan os.Signal)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-c
-			fmt.Printf("%v Exiting run, the machine will be removed from available host for your sweep %v \n", emoji.Avocado, emoji.Avocado)
-			killed := unregisterHost(args[1])
-
-			time.Sleep(100)
-			if killed {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := srv.Shutdown(ctx); err != nil {
-					log.Fatal("Server forced to shutdown:", err)
-				}
-				os.Exit(1)
-			}
-
-		}()
 		if len(args) < 1 {
 			color.Red("Please specify the action to init ( picsell launch sweep ) \n")
 			return
@@ -142,12 +72,20 @@ to quickly create a Cobra application.`,
 				log.Fatal(err)
 			}
 
-			if resp.StatusCode != http.StatusOK {
-				fmt.Println(resp.StatusCode)
-				fmt.Printf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+			if resp.StatusCode == http.StatusBadRequest {
+				fmt.Printf("%v  Host not registered, please run ( picsell init sweep %v )  %v \n", emoji.Warning, args[1], emoji.Warning)
 				return
 			}
 
+			if resp.StatusCode == http.StatusNotFound {
+				fmt.Printf("%v  Sweep does not exists, please check the ID  %v\n", emoji.Warning, emoji.Warning)
+				return
+			}
+
+			if resp.StatusCode == http.StatusNoContent {
+				fmt.Printf("%v  No more runs to launch  %v\n", emoji.Avocado, emoji.Avocado)
+				return
+			}
 			defer resp.Body.Close()
 
 			var res Run
@@ -165,6 +103,13 @@ to quickly create a Cobra application.`,
 				log.Fatal("Container did not start")
 			}
 			fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", res.DockerImage, container_id, emoji.Laptop)
+			// stopped := make(chan bool)
+
+			run_id := getRunId(res)
+
+			if run_id != "failed" {
+				go checkRunning(container_id, run_id)
+			}
 			var port = 8080
 			subdomain := getConfigHost()
 
@@ -174,10 +119,87 @@ to quickly create a Cobra application.`,
 				log.Fatal(err)
 				return
 			}
-
+			color.Red(tunnel.URL())
 			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Name, emoji.Avocado, emoji.Avocado)
 			color.Green("%v  Do not kill this terminal, you won't be able to perform automatical job call  %v\n", emoji.Warning, emoji.Warning)
 
+			gin.SetMode(gin.ReleaseMode)
+			r := gin.Default()
+
+			srv := &http.Server{
+				Addr:    ":8080",
+				Handler: r,
+			}
+			r.POST("/next_run", func(c *gin.Context) {
+				var run Run
+				if err := c.BindJSON(&run); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{
+						"message": "bad request format",
+					})
+					return
+				}
+				var envs []string
+				for i := range run.Env {
+					envs = append(envs, run.Env[i].Name+"="+run.Env[i].Value)
+				}
+				fmt.Printf("Starting container %v to launch run %v %v \n", run.DockerImage, run.Name, emoji.ManTechnologist)
+				container_id := RunContainerCmd(run.DockerImage, envs, gpus)
+				fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", run.DockerImage, container_id, emoji.Laptop)
+				c.JSON(200, gin.H{
+					"sucess": "Next run launched",
+				})
+			})
+
+			r.POST("/kill", func(c *gin.Context) {
+				fmt.Printf("Received kill")
+				var killInstruction Kill
+				if err := c.BindJSON(&killInstruction); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{
+						"message": "bad request format",
+					})
+					return
+				}
+				fmt.Printf("Instruction to kill %v received %v \n", killInstruction.Name, emoji.ManTechnologist)
+				killed := stopRunningContainer(killInstruction.DockerImage)
+				if !killed {
+					fmt.Printf("Can't kill container")
+				}
+				c.JSON(200, gin.H{
+					"message": "container stop",
+				})
+			})
+
+			r.POST("/terminate", func(c *gin.Context) {
+
+				c.JSON(200, gin.H{
+					"message": "terminated",
+				})
+				fmt.Printf("No more run to go bye bye \n")
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := srv.Shutdown(ctx); err != nil {
+					log.Fatal("Server forced to shutdown:", err)
+				}
+			})
+
+			c := make(chan os.Signal)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				<-c
+				fmt.Printf("%v Exiting run, the machine will be removed from available host for your sweep %v \n", emoji.Avocado, emoji.Avocado)
+				killed := unregisterHost(args[1])
+
+				time.Sleep(3000)
+				if killed {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					if err := srv.Shutdown(ctx); err != nil {
+						log.Fatal("Server forced to shutdown:", err)
+					}
+					os.Exit(1)
+				}
+
+			}()
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Fatalf("listen: %s\n", err)
 			}
@@ -185,10 +207,6 @@ to quickly create a Cobra application.`,
 	},
 }
 
-func cleanup() {
-
-	fmt.Println("Cleanup")
-}
 func init() {
 	rootCmd.AddCommand(launchCmd)
 

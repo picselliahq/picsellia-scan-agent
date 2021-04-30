@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/enescakir/emoji"
 	uuid "github.com/satori/go.uuid"
@@ -78,7 +79,6 @@ func RunContainer(imageName string, envs []string) string {
 }
 
 func RunContainerCmd(imageName string, envs []string, gpus bool) string {
-	fmt.Println(gpus)
 	app := "docker"
 
 	arg0 := "run"
@@ -174,7 +174,7 @@ func unregisterHost(sweepId string) bool {
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		fmt.Printf("Successfully unregistered host ")
+		fmt.Printf("Successfully unregistered host \n")
 	} else {
 		fmt.Println(resp.StatusCode)
 	}
@@ -197,11 +197,11 @@ func stopRunningContainer(imageName string) bool {
 	for _, container := range containers {
 
 		if container.Image == imageName {
-			fmt.Print("Stopping container ", container.ID[:10], "...")
+			fmt.Print("Stopping container ", container.ID[:10], "... \n")
 			if err := cli.ContainerStop(ctx, container.ID, nil); err != nil {
 				panic(err)
 			}
-			fmt.Printf("%v Stopped", imageName)
+			fmt.Printf("%v Stopped \n", imageName)
 			return true
 		}
 	}
@@ -243,4 +243,70 @@ func getNextRun(sweepID string) {
 	container_id := RunContainer(res.DockerImage, envs)
 	fmt.Printf("%v started\n\nSee logs with ( docker logs %v ) in an other terminal %v \n\n", res.DockerImage, container_id, emoji.Laptop)
 
+}
+
+func indicator(shutdownCh <-chan struct{}) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			fmt.Print(".")
+		case <-shutdownCh:
+			return
+		}
+	}
+}
+
+func checkRunning(container_id string, run_id string) {
+
+	for {
+		ctx := context.Background()
+		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+		if err != nil {
+			panic(err)
+		}
+
+		options := types.ContainerLogsOptions{ShowStdout: true}
+		_, err = cli.ContainerLogs(ctx, container_id, options)
+		if err != nil {
+			token := getAPIToken()
+			var bearer = "Token " + token
+
+			req, err := http.NewRequest("POST", URL+"run/cli/possible_failure/"+run_id, nil)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Add("Authorization", bearer)
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+
+			if err != nil {
+				log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+				return
+			}
+
+			if resp.StatusCode == http.StatusNotFound {
+				log.Fatalf("%v  Run does not exists  %v \n", emoji.Warning, emoji.Warning)
+				return
+			}
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+			if resp.StatusCode == http.StatusCreated {
+				log.Fatalf("%v  Docker image failed, inspect the logs with (docker logs %v )  %v \n", emoji.Warning, container_id, emoji.Warning)
+				return
+			}
+		}
+	}
+}
+
+func getRunId(run Run) string {
+
+	for i := range run.Env {
+		if run.Env[i].Name == "run_id" {
+			return run.Env[i].Value
+		}
+	}
+
+	return "failed"
 }

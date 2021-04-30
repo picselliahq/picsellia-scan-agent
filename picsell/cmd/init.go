@@ -29,7 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var URL = "https://beta.picsellia.com/sdk/v2/"
+var URL = "http://localhost:8000/sdk/v2/"
 
 type Configuration struct {
 	TunnelUrlID string
@@ -75,8 +75,14 @@ var initCmd = &cobra.Command{
 				log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
 				return
 			}
-			if resp.StatusCode != http.StatusCreated {
-				log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+
+			if resp.StatusCode == http.StatusNotFound {
+				color.Red("The sweep you are trying to init does not exists")
+				return
+			}
+
+			if resp.StatusCode == http.StatusNoContent {
+				color.Green("No more jobs to run !")
 				return
 			}
 
@@ -85,25 +91,28 @@ var initCmd = &cobra.Command{
 			var res DockerRun
 			json.NewDecoder(resp.Body).Decode(&res)
 
-			fmt.Printf("Pulling docker image %v %v \n \n", res.DockerImage, emoji.Whale)
+			fmt.Printf("Pulling docker image %v %v\n", res.DockerImage, emoji.Whale)
 
 			app := "docker"
-
 			arg0 := "pull"
 			arg1 := res.DockerImage
 
+			shutdownCh := make(chan struct{})
+			go indicator(shutdownCh)
 			cmd := exec.Command(app, arg0, arg1)
-			stdout, err := cmd.Output()
+			_, err = cmd.Output()
+
+			close(shutdownCh)
+			fmt.Printf("%v\n", emoji.CheckMark)
 
 			if err != nil {
-				fmt.Println(err.Error())
+				color.Red("Picsell can't pull %v\nConsider running ( docker pull %v ) in another terminal", res.DockerImage, res.DockerImage)
 				return
 			}
-
-			fmt.Println(string(stdout))
-			fmt.Printf("Docker image %v pulled %v \n You can run (picsell launch sweep %v ) \n", res.DockerImage, emoji.ThumbsUp, args[1])
+			fmt.Printf("Docker image %v pulled %v\nYou can run (picsell launch sweep %v ) \n", res.DockerImage, emoji.ThumbsUp, args[1])
 		} else {
-			log.Fatalf("Please run init sweep ID")
+			color.Red("Please run init sweep ID")
+			return
 		}
 
 	},
