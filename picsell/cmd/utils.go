@@ -149,7 +149,7 @@ func getAPIToken() string {
 	api_token, err := os.LookupEnv("PICSELLIA_TOKEN")
 
 	if !err {
-		log.Fatalf("Please set up your PICSELLIA_TOKEN in your env variable ( export PICSELLIA_TOKEN=your_token ) ")
+		log.Fatalf("Please set up your PICSELLIA_TOKEN in your env variable ( export PICSELLIA_TOKEN=your_token ) \n")
 	}
 
 	return api_token

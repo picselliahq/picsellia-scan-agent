@@ -29,7 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var URL = "http://localhost:8000/sdk/v2/"
+var URL = "https://beta.picsellia.com/sdk/v2/"
 
 type Configuration struct {
 	TunnelUrlID string
@@ -109,6 +109,7 @@ var initCmd = &cobra.Command{
 				color.Red("Picsell can't pull %v\nConsider running ( docker pull %v ) in another terminal", res.DockerImage, res.DockerImage)
 				return
 			}
+
 			fmt.Printf("Docker image %v pulled %v\nYou can run (picsell launch sweep %v ) \n", res.DockerImage, emoji.ThumbsUp, args[1])
 		} else {
 			color.Red("Please run init sweep ID")
