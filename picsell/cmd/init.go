@@ -37,19 +37,19 @@ type Configuration struct {
 
 // initCmd represents the init command
 var initCmd = &cobra.Command{
-	Use:   "init sweep YOUR_SWEEP_ID",
+	Use:   "init scan YOUR_SCAN_ID",
 	Short: "Initialize connection to Picsellia server",
 	Long:  `Use the init command to register this machine to Picsellia platform, This way Picsellia Oracle will be able to send jobs to it.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {
-			color.Red("Please specify the action to init ( picsell init sweep ID ) \n")
+			color.Red("Please specify the action to init ( picsell init scan ID ) \n")
 			return
 		}
 		user, _ := user.Current()
-		if args[0] == "sweep" {
+		if args[0] == "scan" {
 			if len(args) < 2 {
-				color.Red("Please provide the sweep ID ( picsell init sweep SWEEP_ID ) \n")
+				color.Red("Please provide the scan ID ( picsell init scan SCAN_ID ) \n")
 				return
 			}
 			subdomain := getConfigHost()
@@ -76,8 +76,12 @@ var initCmd = &cobra.Command{
 				return
 			}
 
+			if resp.StatusCode == http.StatusUnauthorized {
+				color.Red("Wrong PICSELLIA_TOKEN")
+				return
+			}
 			if resp.StatusCode == http.StatusNotFound {
-				color.Red("The sweep you are trying to init does not exists")
+				color.Red("The scan you are trying to init does not exists")
 				return
 			}
 
@@ -110,9 +114,9 @@ var initCmd = &cobra.Command{
 				return
 			}
 
-			fmt.Printf("Docker image %v pulled %v\nYou can run (picsell launch sweep %v ) \n", res.DockerImage, emoji.ThumbsUp, args[1])
+			fmt.Printf("Docker image %v pulled %v\nYou can run (picsell launch scan %v ) \n", res.DockerImage, emoji.ThumbsUp, args[1])
 		} else {
-			color.Red("Please run init sweep ID")
+			color.Red("Please run init scan ID")
 			return
 		}
 

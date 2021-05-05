@@ -36,24 +36,19 @@ import (
 
 // launchCmd represents the launch command
 var launchCmd = &cobra.Command{
-	Use:   "launch",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "launch scan SCAN_ID",
+	Short: "This launch the scan :) Then listen for next run when one is over.",
+	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		gpus := viper.GetBool("gpu")
 
 		if len(args) < 1 {
-			color.Red("Please specify the action to init ( picsell launch sweep ) \n")
+			color.Red("Please specify the action to launch ( picsell launch scan ) \n")
 			return
 		}
-		if args[0] == "sweep" {
+		if args[0] == "scan" {
 			if len(args) < 2 {
-				color.Red("Please provide the sweep ID ( picsell launch sweep SWEEP_ID ) \n")
+				color.Red("Please provide the scan ID ( picsell launch scan SCAN_ID ) \n")
 				return
 			}
 
@@ -73,17 +68,22 @@ to quickly create a Cobra application.`,
 			}
 
 			if resp.StatusCode == http.StatusBadRequest {
-				fmt.Printf("%v  Host not registered, please run ( picsell init sweep %v )  %v \n", emoji.Warning, args[1], emoji.Warning)
+				fmt.Printf("%v  Host not registered, please run ( picsell init scan %v )  %v \n", emoji.Warning, args[1], emoji.Warning)
 				return
 			}
 
 			if resp.StatusCode == http.StatusNotFound {
-				fmt.Printf("%v  Sweep does not exists, please check the ID  %v\n", emoji.Warning, emoji.Warning)
+				fmt.Printf("%v  Scan does not exists, please check the ID  %v\n", emoji.Warning, emoji.Warning)
 				return
 			}
 
 			if resp.StatusCode == http.StatusNoContent {
 				fmt.Printf("%v  No more runs to launch  %v\n", emoji.Avocado, emoji.Avocado)
+				return
+			}
+
+			if resp.StatusCode == http.StatusUnauthorized {
+				color.Red("Wrong PICSELLIA_TOKEN")
 				return
 			}
 			defer resp.Body.Close()
@@ -107,22 +107,20 @@ to quickly create a Cobra application.`,
 
 			run_id := getRunId(res)
 
-			if run_id != "failed" {
-				go checkRunning(container_id, run_id)
-			}
 			var port = 8080
 			subdomain := getConfigHost()
 
 			var tunnel = localtunnel.NewLocalTunnel(port)
 			var errs = tunnel.OpenAs(subdomain)
 			if errs != nil {
-				log.Fatal(err)
-				return
+				log.Fatalf("Can not create SSH tunnel")
 			}
-			color.Red(tunnel.URL())
 			fmt.Printf("Training %v launched, you can visualize your performance metrics on %v https://beta.picsellia.com %v  \n\n", res.Name, emoji.Avocado, emoji.Avocado)
 			color.Green("%v  Do not kill this terminal, you won't be able to perform automatical job call  %v\n", emoji.Warning, emoji.Warning)
 
+			if run_id != "failed" {
+				go checkRunning(container_id, run_id)
+			}
 			gin.SetMode(gin.ReleaseMode)
 			r := gin.Default()
 
@@ -186,7 +184,7 @@ to quickly create a Cobra application.`,
 			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 			go func() {
 				<-c
-				fmt.Printf("%v Exiting run, the machine will be removed from available host for your sweep %v \n", emoji.Avocado, emoji.Avocado)
+				fmt.Printf("%v Exiting run, the machine will be removed from available host for your scan %v \n", emoji.Avocado, emoji.Avocado)
 				killed := unregisterHost(args[1])
 
 				time.Sleep(3000)

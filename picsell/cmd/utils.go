@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"strings"
+
 	"github.com/enescakir/emoji"
 	uuid "github.com/satori/go.uuid"
 
@@ -50,7 +52,6 @@ func getConfigHost() string {
 			TunnelUrlID: uuidStr,
 		}
 		file, _ := json.Marshal(&conf)
-		fmt.Println(string(file))
 		_ = ioutil.WriteFile(path, file, 0644)
 		return uuidStr
 	}
@@ -67,7 +68,7 @@ func RunContainer(imageName string, envs []string) string {
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{Image: imageName, Env: envs}, nil, nil, nil, "")
 	if err != nil {
-		log.Fatalf("Container %v does not exists, please run picsell init sweep ID first\nIf the problem persist, try running (docker pull %v) and retry",
+		log.Fatalf("Container %v does not exists, please run picsell init scan ID first\nIf the problem persist, try running (docker pull %v) and retry",
 			imageName, imageName)
 
 	}
@@ -264,38 +265,44 @@ func checkRunning(container_id string, run_id string) {
 		ctx := context.Background()
 		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 		if err != nil {
-			panic(err)
+			log.Fatalf("Docker Daemon stopped")
 		}
 
 		options := types.ContainerLogsOptions{ShowStdout: true}
 		_, err = cli.ContainerLogs(ctx, container_id, options)
+
 		if err != nil {
-			token := getAPIToken()
-			var bearer = "Token " + token
+			if !strings.Contains(err.Error(), "too many open files") {
+				token := getAPIToken()
+				var bearer = "Token " + token
 
-			req, err := http.NewRequest("POST", URL+"run/cli/possible_failure/"+run_id, nil)
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Add("Authorization", bearer)
+				req, err := http.NewRequest("POST", URL+"run/cli/possible_failure/"+run_id, nil)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Add("Authorization", bearer)
 
-			client := &http.Client{}
-			resp, err := client.Do(req)
+				client := &http.Client{}
+				resp, err := client.Do(req)
 
-			if err != nil {
-				log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
-				return
-			}
+				if err != nil {
+					log.Fatalf("%v  Picsell platform not accessible, please try again later  %v \n", emoji.Warning, emoji.Warning)
+					return
+				}
 
-			if resp.StatusCode == http.StatusNotFound {
-				log.Fatalf("%v  Run does not exists  %v \n", emoji.Warning, emoji.Warning)
-				return
+				if resp.StatusCode == http.StatusNotFound {
+					log.Fatalf("%v  Run does not exists  %v \n", emoji.Warning, emoji.Warning)
+					return
+				}
+				if resp.StatusCode == http.StatusOK {
+					return
+				}
+				if resp.StatusCode == http.StatusCreated {
+					log.Fatalf("%v  Docker image failed, inspect the logs with (docker logs %v )  %v \n", emoji.Warning, container_id, emoji.Warning)
+					return
+				}
+			} else {
 			}
-			if resp.StatusCode == http.StatusOK {
-				return
-			}
-			if resp.StatusCode == http.StatusCreated {
-				log.Fatalf("%v  Docker image failed, inspect the logs with (docker logs %v )  %v \n", emoji.Warning, container_id, emoji.Warning)
-				return
-			}
+			//panic(err)
+
 		}
 	}
 }

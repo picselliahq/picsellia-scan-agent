@@ -37,9 +37,9 @@ This CLI will evolve with the features of the Platform,
 
 For now picsell CLI is the simplest way to launch and manage your hyper-parameters tuning process
 
-Just run - picsell init sweep ID -, to register the local machine to Picsellia 
+Just run - picsell init scan ID -, to register the local machine to Picsellia 
 
-Then you can launch experiments with - picsell launch sweep ID -
+Then you can launch experiments with - picsell launch scan ID -
 
 If the near future, Picsell CLI will also allow you to download dataset,
 push AI models and even generate production-ready Deep Learning APIs.
